@@ -6,29 +6,40 @@ from src.config import (
     WINDOW_SIZE,
     MIN_WIDTH,
     MIN_HEIGHT,
-    ANN_RMSE,
-    ANN_MAE,
-    ANN_R2,
-    LR_R2,
+    PVGIS_ANN_RMSE,
+    PVGIS_ANN_MAE,
+    PVGIS_ANN_R2,
+    PVGIS_LR_RMSE,
+    PVGIS_LR_MAE,
+    PVGIS_LR_R2,
+    UCI_ANN_RMSE,
+    UCI_ANN_MAE,
+    UCI_ANN_R2,
+    UCI_LR_RMSE,
+    UCI_LR_MAE,
+    UCI_LR_R2,
 )
 
-from src.model_loader import load_model_and_artifacts
+from src.model_loader import load_all_models_and_artifacts
 from src.predictor import (
-    predict_energy_output,
-    get_energy_status,
+    predict_from_model,
+    get_solar_status,
+    get_heating_status,
     get_energy_percentage,
 )
-from src.validation import validate_inputs
+from src.validation import validate_pvgis_inputs, validate_uci_inputs
 
 from ui.theme import BG, CARD, WHITE, ACCENT, ACCENT_DARK, TEXT, MUTED, BORDER
-from ui.components import add_input, create_metric_card, create_info_card
+from ui.components import add_input, create_info_card
 
 
 class EnergyDashboard(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.model, self.scaler_X, self.scaler_y, self.features = load_model_and_artifacts()
+        self.models = load_all_models_and_artifacts()
+        self.current_mode = "pvgis"
+        self.entries = {}
 
         self.title(APP_TITLE)
         self.geometry(WINDOW_SIZE)
@@ -45,6 +56,8 @@ class EnergyDashboard(ctk.CTk):
         self.build_hero()
         self.build_main_section()
         self.build_metrics_section()
+
+    # Navbar
 
     def build_navbar(self):
         nav = ctk.CTkFrame(self.wrapper, fg_color=BG)
@@ -97,6 +110,8 @@ class EnergyDashboard(ctk.CTk):
                 hover_color="#F4F1EB"
             ).pack(side="left", padx=6)
 
+    # Hero
+
     def build_hero(self):
         hero = ctk.CTkFrame(self.wrapper, fg_color=BG)
         hero.pack(fill="x", pady=(0, 18))
@@ -120,7 +135,7 @@ class EnergyDashboard(ctk.CTk):
 
         ctk.CTkLabel(
             left,
-            text="Professional solar output monitoring and ANN-based prediction dashboard.",
+            text="Professional ANN-based energy prediction dashboard.",
             text_color=MUTED,
             font=ctk.CTkFont(size=18)
         ).pack(anchor="w")
@@ -131,7 +146,7 @@ class EnergyDashboard(ctk.CTk):
             corner_radius=24,
             border_color=BORDER,
             border_width=1,
-            width=360,
+            width=380,
             height=180
         )
         right.pack(side="right", padx=(20, 0))
@@ -139,7 +154,7 @@ class EnergyDashboard(ctk.CTk):
 
         ctk.CTkLabel(
             right,
-            text="Live Monitoring Summary",
+            text="Live Prediction Summary",
             text_color=TEXT,
             font=ctk.CTkFont(size=24, weight="bold")
         ).pack(anchor="w", padx=20, pady=(20, 8))
@@ -154,12 +169,15 @@ class EnergyDashboard(ctk.CTk):
 
         self.summary_text = ctk.CTkLabel(
             right,
-            text="Use the panel below to estimate solar energy output.",
+            text="Select a dataset mode and enter values to predict.",
             text_color=MUTED,
             font=ctk.CTkFont(size=14),
-            justify="left"
+            justify="left",
+            wraplength=330
         )
         self.summary_text.pack(anchor="w", padx=20, pady=(10, 8))
+
+    # Main Section
 
     def build_main_section(self):
         main = ctk.CTkFrame(self.wrapper, fg_color=BG)
@@ -169,55 +187,83 @@ class EnergyDashboard(ctk.CTk):
         self.build_result_panel(main)
 
     def build_input_card(self, parent):
-        input_card = ctk.CTkFrame(
+        self.input_card = ctk.CTkScrollableFrame(
             parent,
             fg_color=CARD,
             corner_radius=24,
             border_color=BORDER,
             border_width=1,
-            width=500
+            width=500,
+            scrollbar_button_color=ACCENT,
+            scrollbar_button_hover_color=ACCENT_DARK
         )
-        input_card.pack(side="left", fill="y", padx=(0, 12))
-        input_card.pack_propagate(False)
+        self.input_card.pack(side="left", fill="both", padx=(0, 12), expand=False)
 
         ctk.CTkLabel(
-            input_card,
+            self.input_card,
             text="Prediction Inputs",
             text_color=TEXT,
             font=ctk.CTkFont(size=28, weight="bold")
         ).pack(anchor="w", padx=24, pady=(24, 8))
 
         ctk.CTkLabel(
-            input_card,
-            text="Enter current solar and weather conditions.",
+            self.input_card,
+            text="Choose a model and enter the required feature values.",
             text_color=MUTED,
             font=ctk.CTkFont(size=14)
-        ).pack(anchor="w", padx=24, pady=(0, 16))
+        ).pack(anchor="w", padx=24, pady=(0, 14))
 
-        form = ctk.CTkFrame(input_card, fg_color=CARD)
-        form.pack(fill="x", padx=20, pady=(0, 10))
+        selector_frame = ctk.CTkFrame(self.input_card, fg_color=CARD)
+        selector_frame.pack(fill="x", padx=20, pady=(0, 12))
 
-        self.entry_h_sun = add_input(form, "Sun Height H_sun", "0 - 90", 0)
-        self.entry_temp = add_input(form, "Temperature T2m (°C)", "15 - 45", 1)
-        self.entry_wind = add_input(form, "Wind Speed WS10m (m/s)", "0 - 20", 2)
-        self.entry_hour = add_input(form, "Hour", "0 - 23", 3)
-        self.entry_month = add_input(form, "Month", "1 - 12", 4)
-        self.entry_day = add_input(form, "Day of Week", "0=Mon ... 6=Sun", 5)
+        ctk.CTkLabel(
+            selector_frame,
+            text="Prediction Mode",
+            text_color=TEXT,
+            font=ctk.CTkFont(size=14, weight="bold")
+        ).pack(anchor="w", pady=(0, 6))
 
-        button_frame = ctk.CTkFrame(input_card, fg_color=CARD)
-        button_frame.pack(fill="x", padx=20, pady=16)
+        self.mode_selector = ctk.CTkOptionMenu(
+            selector_frame,
+            values=[
+                "PVGIS Solar Output",
+                "UCI Heating Load"
+            ],
+            command=self.on_mode_change,
+            height=42,
+            corner_radius=14,
+            fg_color=WHITE,
+            button_color=ACCENT,
+            button_hover_color=ACCENT_DARK,
+            text_color=TEXT,
+            dropdown_fg_color=WHITE,
+            dropdown_text_color=TEXT,
+            dropdown_hover_color="#F1EEE8"
+        )
+        self.mode_selector.pack(fill="x")
+        self.mode_selector.set("PVGIS Solar Output")
+
+        self.form = ctk.CTkScrollableFrame(
+            self.input_card,
+            fg_color=CARD,
+            height=360,
+            scrollbar_button_color=ACCENT,
+            scrollbar_button_hover_color=ACCENT_DARK
+        )
+        self.form.pack(fill="x", padx=20, pady=(0, 10))
+
+        self.build_dynamic_fields()
+
+        button_frame = ctk.CTkFrame(self.input_card, fg_color=CARD)
+        button_frame.pack(fill="x", padx=20, pady=(4, 16))
 
         buttons = [
-            ("Predict Output", self.predict_energy, ACCENT, "white"),
-            ("Load Noon Example", self.load_noon_example, WHITE, TEXT),
-            ("Load Night Example", self.load_night_example, WHITE, TEXT),
+            ("Predict Output", self.predict, ACCENT, "white"),
+            ("Load Example", self.load_example, WHITE, TEXT),
             ("Clear", self.clear_inputs, WHITE, TEXT),
         ]
 
         for index, (text, command, color, text_color) in enumerate(buttons):
-            row = index // 2
-            col = index % 2
-
             ctk.CTkButton(
                 button_frame,
                 text=text,
@@ -229,10 +275,43 @@ class EnergyDashboard(ctk.CTk):
                 border_width=0 if color == ACCENT else 1,
                 border_color=BORDER,
                 command=command
-            ).grid(row=row, column=col, padx=6, pady=6, sticky="ew")
+            ).grid(row=0, column=index, padx=5, pady=6, sticky="ew")
 
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_columnconfigure(2, weight=1)
+
+    def build_dynamic_fields(self):
+        for widget in self.form.winfo_children():
+            widget.destroy()
+
+        self.entries = {}
+
+        if self.current_mode == "pvgis":
+            fields = [
+                ("h_sun", "Sun Height H_sun", "0 - 90"),
+                ("temperature", "Temperature T2m (°C)", "15 - 45"),
+                ("wind_speed", "Wind Speed WS10m (m/s)", "0 - 20"),
+                ("hour", "Hour", "0 - 23"),
+                ("month", "Month", "1 - 12"),
+                ("day_of_week", "Day of Week", "0=Mon ... 6=Sun"),
+            ]
+        else:
+            fields = [
+                ("relative_compactness", "Relative Compactness", "0.5 - 1.0"),
+                ("surface_area", "Surface Area", "500 - 900"),
+                ("wall_area", "Wall Area", "200 - 450"),
+                ("roof_area", "Roof Area", "100 - 250"),
+                ("overall_height", "Overall Height", "3.5 or 7.0"),
+                ("orientation", "Orientation", "2, 3, 4, or 5"),
+                ("glazing_area", "Glazing Area", "0 - 0.4"),
+                ("glazing_area_distribution", "Glazing Area Distribution", "0 - 5"),
+            ]
+
+        for row, (key, label, placeholder) in enumerate(fields):
+            self.entries[key] = add_input(self.form, label, placeholder, row)
+
+    # Result Panel
 
     def build_result_panel(self, parent):
         right_panel = ctk.CTkFrame(parent, fg_color=BG)
@@ -249,12 +328,13 @@ class EnergyDashboard(ctk.CTk):
         result_card.pack(fill="x", pady=(0, 12))
         result_card.pack_propagate(False)
 
-        ctk.CTkLabel(
+        self.result_title = ctk.CTkLabel(
             result_card,
-            text="Total Energy",
+            text="Solar Energy Output",
             text_color=TEXT,
             font=ctk.CTkFont(size=28, weight="bold")
-        ).pack(anchor="w", padx=24, pady=(24, 8))
+        )
+        self.result_title.pack(anchor="w", padx=24, pady=(24, 8))
 
         self.result_value = ctk.CTkLabel(
             result_card,
@@ -266,9 +346,10 @@ class EnergyDashboard(ctk.CTk):
 
         self.result_desc = ctk.CTkLabel(
             result_card,
-            text="Predict to see the estimated solar energy output.",
+            text="Predict to see the estimated output.",
             text_color=MUTED,
-            font=ctk.CTkFont(size=15)
+            font=ctk.CTkFont(size=15),
+            wraplength=650
         )
         self.result_desc.pack(anchor="w", padx=24, pady=(8, 16))
 
@@ -296,15 +377,15 @@ class EnergyDashboard(ctk.CTk):
 
         self.card_current = create_info_card(
             lower_cards,
-            "Current Power",
+            "Current Prediction",
             "—",
-            "Estimated output right now"
+            "Estimated output"
         )
         self.card_current.grid(row=0, column=0, padx=6, pady=6, sticky="nsew")
 
         self.card_status = create_info_card(
             lower_cards,
-            "System Status",
+            "Prediction Status",
             "Ready",
             "Model loaded successfully"
         )
@@ -322,7 +403,7 @@ class EnergyDashboard(ctk.CTk):
             lower_cards,
             "Dataset",
             "PVGIS-ERA5",
-            "Iloilo 2022–2023"
+            "Solar output prediction"
         )
         self.card_dataset.grid(row=1, column=1, padx=6, pady=6, sticky="nsew")
 
@@ -331,107 +412,218 @@ class EnergyDashboard(ctk.CTk):
         lower_cards.grid_rowconfigure(0, weight=1)
         lower_cards.grid_rowconfigure(1, weight=1)
 
-    def build_metrics_section(self):
-        metrics = ctk.CTkFrame(self.wrapper, fg_color=BG)
-        metrics.pack(fill="x", pady=(16, 0))
+    # Metrics Section
 
-        cards = [
-            ("ANN RMSE", f"{ANN_RMSE:.6f}", "Lower is better"),
-            ("ANN MAE", f"{ANN_MAE:.6f}", "Average absolute error"),
-            ("ANN R²", f"{ANN_R2:.6f}", "Explains 91.3% variance"),
-            ("Linear Regression R²", f"{LR_R2:.6f}", "Baseline comparison"),
-        ]
+    def build_metrics_section(self):
+        self.metrics = ctk.CTkFrame(self.wrapper, fg_color=BG)
+        self.metrics.pack(fill="x", pady=(16, 0))
+        self.metric_cards = []
+        self.update_metric_cards()
+
+    def create_metric_card(self, parent, title, value, subtitle):
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=CARD,
+            corner_radius=22,
+            border_color=BORDER,
+            border_width=1,
+            height=120
+        )
+        card.pack_propagate(False)
+
+        ctk.CTkLabel(
+            card,
+            text=title,
+            text_color=TEXT,
+            font=ctk.CTkFont(size=13, weight="bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=14, pady=(14, 4))
+
+        ctk.CTkLabel(
+            card,
+            text=value,
+            text_color=ACCENT,
+            font=ctk.CTkFont(size=22, weight="bold"),
+            anchor="w"
+        ).pack(anchor="w", padx=14, pady=(0, 2))
+
+        ctk.CTkLabel(
+            card,
+            text=subtitle,
+            text_color=MUTED,
+            font=ctk.CTkFont(size=11),
+            anchor="w",
+            wraplength=180,
+            justify="left"
+        ).pack(anchor="w", padx=14, pady=(0, 10))
+
+        return card
+
+    def update_metric_cards(self):
+        for widget in self.metrics.winfo_children():
+            widget.destroy()
+
+        if self.current_mode == "pvgis":
+            cards = [
+                ("ANN RMSE", f"{PVGIS_ANN_RMSE:.4f}", "Solar model"),
+                ("ANN MAE", f"{PVGIS_ANN_MAE:.4f}", "Average error"),
+                ("ANN R²", f"{PVGIS_ANN_R2:.4f}", "ANN accuracy"),
+                ("Baseline R²", f"{PVGIS_LR_R2:.4f}", "Linear Regression"),
+            ]
+        else:
+            cards = [
+                ("ANN RMSE", f"{UCI_ANN_RMSE:.4f}", "Heating load model"),
+                ("ANN MAE", f"{UCI_ANN_MAE:.4f}", "Average error"),
+                ("ANN R²", f"{UCI_ANN_R2:.4f}", "ANN accuracy"),
+                ("Baseline R²", f"{UCI_LR_R2:.4f}", "Linear Regression"),
+            ]
 
         for title, value, subtitle in cards:
-            card = create_metric_card(metrics, title, value, subtitle)
-            card.pack(side="left", fill="both", expand=True, padx=6)
+            card = self.create_metric_card(self.metrics, title, value, subtitle)
+            card.pack(side="left", fill="both", expand=True, padx=4)
+
+    # Mode Switching
+
+    def on_mode_change(self, selected):
+        if selected == "PVGIS Solar Output":
+            self.current_mode = "pvgis"
+        else:
+            self.current_mode = "uci"
+
+        self.build_dynamic_fields()
+        self.clear_inputs()
+        self.update_mode_labels()
+        self.update_metric_cards()
+
+    def update_mode_labels(self):
+        if self.current_mode == "pvgis":
+            self.result_title.configure(text="Solar Energy Output")
+            self.result_value.configure(text="0.0000 kWh")
+            self.card_dataset.value_label.configure(text="PVGIS-ERA5")
+            self.card_dataset.subtitle_label.configure(text="Solar output prediction")
+            self.summary_text.configure(text="PVGIS mode predicts estimated solar energy output.")
+        else:
+            self.result_title.configure(text="Building Heating Load")
+            self.result_value.configure(text="0.0000")
+            self.card_dataset.value_label.configure(text="UCI Energy")
+            self.card_dataset.subtitle_label.configure(text="Heating load prediction")
+            self.summary_text.configure(text="UCI mode predicts building heating load.")
+
+    # Actions
 
     def clear_inputs(self):
-        for entry in [
-            self.entry_h_sun,
-            self.entry_temp,
-            self.entry_wind,
-            self.entry_hour,
-            self.entry_month,
-            self.entry_day
-        ]:
+        for entry in self.entries.values():
             entry.delete(0, "end")
 
-        self.result_value.configure(text="0.0000 kWh")
-        self.result_desc.configure(text="Predict to see the estimated solar energy output.")
+        if self.current_mode == "pvgis":
+            self.result_value.configure(text="0.0000 kWh")
+        else:
+            self.result_value.configure(text="0.0000")
+
+        self.result_desc.configure(text="Predict to see the estimated output.")
         self.energy_progress.set(0)
         self.percentage_label.configure(text="0%")
         self.summary_status.configure(text="System Ready")
-        self.summary_text.configure(text="Use the panel below to estimate solar energy output.")
         self.card_current.value_label.configure(text="—")
         self.card_status.value_label.configure(text="Ready")
         self.card_status.subtitle_label.configure(text="Model loaded successfully")
 
-    def load_noon_example(self):
+    def load_example(self):
         self.clear_inputs()
-        self.entry_h_sun.insert(0, "70")
-        self.entry_temp.insert(0, "32")
-        self.entry_wind.insert(0, "4")
-        self.entry_hour.insert(0, "12")
-        self.entry_month.insert(0, "5")
-        self.entry_day.insert(0, "2")
 
-    def load_night_example(self):
-        self.clear_inputs()
-        self.entry_h_sun.insert(0, "0")
-        self.entry_temp.insert(0, "26")
-        self.entry_wind.insert(0, "2")
-        self.entry_hour.insert(0, "23")
-        self.entry_month.insert(0, "5")
-        self.entry_day.insert(0, "2")
+        if self.current_mode == "pvgis":
+            values = {
+                "h_sun": "70",
+                "temperature": "32",
+                "wind_speed": "4",
+                "hour": "12",
+                "month": "5",
+                "day_of_week": "2",
+            }
+        else:
+            values = {
+                "relative_compactness": "0.76",
+                "surface_area": "661.5",
+                "wall_area": "416.5",
+                "roof_area": "122.5",
+                "overall_height": "7.0",
+                "orientation": "3",
+                "glazing_area": "0.25",
+                "glazing_area_distribution": "3",
+            }
 
-    def predict_energy(self):
+        for key, value in values.items():
+            self.entries[key].insert(0, value)
+
+    def predict(self):
         try:
-            h_sun = float(self.entry_h_sun.get())
-            temperature = float(self.entry_temp.get())
-            wind_speed = float(self.entry_wind.get())
-            hour = float(self.entry_hour.get())
-            month = float(self.entry_month.get())
-            day_of_week = float(self.entry_day.get())
+            if self.current_mode == "pvgis":
+                values = [
+                    float(self.entries["h_sun"].get()),
+                    float(self.entries["temperature"].get()),
+                    float(self.entries["wind_speed"].get()),
+                    float(self.entries["hour"].get()),
+                    float(self.entries["month"].get()),
+                    float(self.entries["day_of_week"].get()),
+                ]
 
-            error_message = validate_inputs(
-                h_sun,
-                temperature,
-                wind_speed,
-                hour,
-                month,
-                day_of_week
-            )
+                error_message = validate_pvgis_inputs(values)
+                if error_message:
+                    messagebox.showerror("Input Error", error_message)
+                    return
 
-            if error_message:
-                messagebox.showerror("Input Error", error_message)
-                return
+                model_bundle = self.models["pvgis"]
+                prediction = predict_from_model(
+                    model_bundle["model"],
+                    model_bundle["scaler_X"],
+                    model_bundle["scaler_y"],
+                    values
+                )
 
-            energy_kwh = predict_energy_output(
-                self.model,
-                self.scaler_X,
-                self.scaler_y,
-                h_sun,
-                temperature,
-                wind_speed,
-                hour,
-                month,
-                day_of_week
-            )
+                status, desc = get_solar_status(prediction)
+                progress, percentage = get_energy_percentage(prediction, max_expected=0.86)
 
-            status, desc = get_energy_status(energy_kwh)
-            progress, percentage = get_energy_percentage(energy_kwh)
+                self.result_value.configure(text=f"{prediction:.4f} kWh")
+                self.card_current.value_label.configure(text=f"{prediction:.4f} kWh")
 
-            self.result_value.configure(text=f"{energy_kwh:.4f} kWh")
+            else:
+                values = [
+                    float(self.entries["relative_compactness"].get()),
+                    float(self.entries["surface_area"].get()),
+                    float(self.entries["wall_area"].get()),
+                    float(self.entries["roof_area"].get()),
+                    float(self.entries["overall_height"].get()),
+                    float(self.entries["orientation"].get()),
+                    float(self.entries["glazing_area"].get()),
+                    float(self.entries["glazing_area_distribution"].get()),
+                ]
+
+                error_message = validate_uci_inputs(values)
+                if error_message:
+                    messagebox.showerror("Input Error", error_message)
+                    return
+
+                model_bundle = self.models["uci"]
+                prediction = predict_from_model(
+                    model_bundle["model"],
+                    model_bundle["scaler_X"],
+                    model_bundle["scaler_y"],
+                    values
+                )
+
+                status, desc = get_heating_status(prediction)
+                progress, percentage = get_energy_percentage(prediction, max_expected=45)
+
+                self.result_value.configure(text=f"{prediction:.4f}")
+                self.card_current.value_label.configure(text=f"{prediction:.4f}")
+
             self.result_desc.configure(text=desc)
             self.energy_progress.set(progress)
             self.percentage_label.configure(text=f"{percentage}%")
-            self.summary_status.configure(text=status)
-            self.summary_text.configure(
-                text=f"Predicted solar energy output is {energy_kwh:.4f} kWh."
-            )
 
-            self.card_current.value_label.configure(text=f"{energy_kwh:.4f} kWh")
+            self.summary_status.configure(text=status)
+            self.summary_text.configure(text=f"Predicted value: {prediction:.4f}")
+
             self.card_status.value_label.configure(text=status)
             self.card_status.subtitle_label.configure(text=desc)
 
