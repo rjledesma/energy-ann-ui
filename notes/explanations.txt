@@ -1,0 +1,50 @@
+A desktop app that loads the trained ANN model and predicts energy output from user inputs.
+
+Demonstrates:
+1. Your trained models can be exported from Colab.
+2. The models can be loaded in a separate Python application.
+3. The same scalers and feature order are used correctly.
+4. Users can enter new data and get predictions.
+5. The app supports two real datasets.
+6. The app shows model performance metrics.
+7. The app validates bad input values.
+
+Application:
+A user enters weather or building information.
+The trained ANN processes the values.
+The app outputs predicted solar energy or heating load.
+
+PVGIS Solar Output Mode:
+1. Solar planning
+A homeowner, student, or small installer can estimate whether a location and time condition will produce low, moderate, or high solar output.
+
+2. Energy scheduling
+If predicted output is high around midday, users can schedule energy-heavy tasks during that time, such as charging batteries or running appliances.
+
+3. Renewable energy education
+Teachers/students can see how sun height, time of day, temperature, and wind speed affect solar generation.
+
+4. Feasibility
+Before installing solar panels, users can explore whether the expected energy output is reasonable for their location.
+
+UCI Heating Load mode:
+1. Building design comparison
+Architects, engineers, or students can compare how different building shapes, surface areas, roof areas, wall areas, and glazing affect heating demand.
+
+2. Energy-efficient design
+If the predicted heating load is high, the design may need improvements, such as reducing heat loss, changing glazing, or modifying building geometry.
+
+3. Early-stage simulation alternative
+Instead of running complex energy simulation software, the ANN gives a quick estimate.
+
+4. Academic demonstration
+It shows how ANN can learn energy-related patterns from building features and support energy efficiency decisions.
+
+It answers two practical questions:
+Solar mode:
+"Given these weather and time conditions, how much solar energy might be produced?"
+
+Heating load mode:
+"Given this building design, how much heating energy might the building require?"
+
+The UI is not a replacement for professional engineering software or actual solar monitoring systems. It is a prototype that demonstrates how trained ANN models can support quick energy prediction and educational analysis.
