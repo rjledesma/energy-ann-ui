@@ -1,5 +1,4 @@
 import customtkinter as ctk
-from src.interpretation import compare_models, generate_overall_interpretation
 
 from src.config import (
     PVGIS_ANN_RMSE,
@@ -16,45 +15,86 @@ from src.config import (
     UCI_LR_R2,
 )
 
+from src.interpretation import compare_models, generate_overall_interpretation
 from ui.theme import BG, CARD, WHITE, ACCENT, TEXT, MUTED, BORDER
 
 
 def build_analytics_page(app):
     page = ctk.CTkFrame(app.page_container, fg_color=BG)
-    page.pack(fill="both", expand=True)
+    page.grid(row=0, column=0, sticky="nsew")
+    page.grid_columnconfigure(0, weight=1)
+
+    content = ctk.CTkFrame(page, fg_color=BG)
+    content.grid(row=1, column=0, sticky="nsew")
+
+    content.grid_columnconfigure(0, weight=1)
+    content.grid_rowconfigure(0, weight=0)
+    content.grid_rowconfigure(1, weight=0)
+    content.grid_rowconfigure(2, weight=0)
+    content.grid_rowconfigure(3, weight=1)
 
     ctk.CTkLabel(
-        page,
+        content,
         text="Analytics",
         text_color=TEXT,
         font=ctk.CTkFont(size=42, weight="bold")
-    ).pack(anchor="w", pady=(10, 8))
+    ).grid(row=0, column=0, sticky="w")
 
     ctk.CTkLabel(
-        page,
+        content,
         text="Model performance comparison across PVGIS and UCI datasets.",
         text_color=MUTED,
         font=ctk.CTkFont(size=18)
-    ).pack(anchor="w", pady=(0, 18))
+    ).grid(row=1, column=0, sticky="w", pady=(4, 18))
 
     table = ctk.CTkFrame(
-        page,
+        content,
         fg_color=WHITE,
         corner_radius=24,
         border_color=BORDER,
         border_width=1
     )
-    table.pack(fill="x", pady=(0, 18))
+    table.grid(row=2, column=0, sticky="ew", pady=(0, 18))
 
-    headers = ["Dataset", "Model", "RMSE", "MAE", "R²"]
+    headers = ["Dataset", "Model", "RMSE", "MAE", "R²", "Unit"]
     rows = [
-        ["PVGIS Solar", "ANN", f"{PVGIS_ANN_RMSE:.4f}", f"{PVGIS_ANN_MAE:.4f}", f"{PVGIS_ANN_R2:.4f}"],
-        ["PVGIS Solar", "Linear Regression", f"{PVGIS_LR_RMSE:.4f}", f"{PVGIS_LR_MAE:.4f}", f"{PVGIS_LR_R2:.4f}"],
-        ["UCI Energy", "ANN", f"{UCI_ANN_RMSE:.4f}", f"{UCI_ANN_MAE:.4f}", f"{UCI_ANN_R2:.4f}"],
-        ["UCI Energy", "Linear Regression", f"{UCI_LR_RMSE:.4f}", f"{UCI_LR_MAE:.4f}", f"{UCI_LR_R2:.4f}"],
+        [
+            "PVGIS Solar",
+            "ANN",
+            f"{PVGIS_ANN_RMSE:.4f}",
+            f"{PVGIS_ANN_MAE:.4f}",
+            f"{PVGIS_ANN_R2:.4f}",
+            "kWh"
+        ],
+        [
+            "PVGIS Solar",
+            "Linear Regression",
+            f"{PVGIS_LR_RMSE:.4f}",
+            f"{PVGIS_LR_MAE:.4f}",
+            f"{PVGIS_LR_R2:.4f}",
+            "kWh"
+        ],
+        [
+            "UCI Energy",
+            "ANN",
+            f"{UCI_ANN_RMSE:.4f}",
+            f"{UCI_ANN_MAE:.4f}",
+            f"{UCI_ANN_R2:.4f}",
+            "Heating Load"
+        ],
+        [
+            "UCI Energy",
+            "Linear Regression",
+            f"{UCI_LR_RMSE:.4f}",
+            f"{UCI_LR_MAE:.4f}",
+            f"{UCI_LR_R2:.4f}",
+            "Heating Load"
+        ],
     ]
 
     for col, header in enumerate(headers):
+        table.grid_columnconfigure(col, weight=1)
+
         ctk.CTkLabel(
             table,
             text=header,
@@ -71,10 +111,16 @@ def build_analytics_page(app):
                 font=ctk.CTkFont(size=14)
             ).grid(row=row_index, column=col_index, padx=16, pady=12, sticky="w")
 
-    for col in range(len(headers)):
-        table.grid_columnconfigure(col, weight=1)
+    explanation = ctk.CTkScrollableFrame(
+        content,
+        fg_color=CARD,
+        corner_radius=24,
+        border_color=BORDER,
+        border_width=1
+    )
+    explanation.grid(row=3, column=0, sticky="nsew")
 
-        pvgis_interpretation = compare_models(
+    pvgis_interpretation = compare_models(
         "PVGIS-ERA5 Solar",
         PVGIS_ANN_RMSE,
         PVGIS_ANN_MAE,
@@ -99,14 +145,12 @@ def build_analytics_page(app):
         uci_interpretation
     )
 
-    explanation = ctk.CTkFrame(
-        page,
-        fg_color=CARD,
-        corner_radius=24,
-        border_color=BORDER,
-        border_width=1
-    )
-    explanation.pack(fill="both", expand=True)
+    ctk.CTkLabel(
+        explanation,
+        text="Results Interpretation",
+        text_color=TEXT,
+        font=ctk.CTkFont(size=28, weight="bold")
+    ).pack(anchor="w", padx=24, pady=(24, 10))
 
     ctk.CTkLabel(
         explanation,
@@ -117,20 +161,26 @@ def build_analytics_page(app):
         ),
         text_color=MUTED,
         font=ctk.CTkFont(size=16),
-        wraplength=1000,
+        wraplength=1100,
         justify="left"
-    ).pack(anchor="w", padx=24, pady=(0, 24))
+    ).pack(anchor="w", padx=24, pady=(0, 18))
+
+    ctk.CTkLabel(
+        explanation,
+        text="Metric Units",
+        text_color=TEXT,
+        font=ctk.CTkFont(size=24, weight="bold")
+    ).pack(anchor="w", padx=24, pady=(4, 8))
 
     ctk.CTkLabel(
         explanation,
         text=(
-            "Lower RMSE and MAE values indicate smaller prediction errors, while a higher R² score "
-            "means the model explains more variation in the target variable. In both datasets, the ANN "
-            "achieved lower error values and higher R² scores compared with Linear Regression, showing "
-            "that the neural network performed better overall."
+            "PVGIS Solar Output: RMSE and MAE are measured in kWh because the target is estimated solar energy output.\n\n"
+            "UCI Heating Load: RMSE and MAE are measured in Heating Load units because the target is building heating load.\n\n"
+            "R² is unitless for both datasets. Lower RMSE and MAE are better, while higher R² is better."
         ),
         text_color=MUTED,
-        font=ctk.CTkFont(size=16),
-        wraplength=1000,
+        font=ctk.CTkFont(size=15),
+        wraplength=1100,
         justify="left"
     ).pack(anchor="w", padx=24, pady=(0, 24))

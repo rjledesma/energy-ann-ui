@@ -5,24 +5,39 @@ from ui.theme import BG, CARD, ACCENT, TEXT, MUTED, BORDER
 
 def build_overview_page(app):
     page = ctk.CTkFrame(app.page_container, fg_color=BG)
-    page.pack(fill="both", expand=True)
+    page = ctk.CTkFrame(app.page_container, fg_color=BG)
+    page.grid(row=0, column=0, sticky="nsew")
+    page.grid_columnconfigure(0, weight=1)
+
+    content = ctk.CTkFrame(page, fg_color=BG)
+    content.grid(row=1, column=0, sticky="nsew")
+
+    content.grid_columnconfigure(0, weight=1)
+    content.grid_rowconfigure(0, weight=0)
+    content.grid_rowconfigure(1, weight=0)
+    content.grid_rowconfigure(2, weight=1)
 
     ctk.CTkLabel(
-        page,
+        content,
         text="Project Overview",
         text_color=TEXT,
         font=ctk.CTkFont(size=42, weight="bold")
-    ).pack(anchor="w", pady=(10, 8))
+    ).grid(row=0, column=0, sticky="w")
 
     ctk.CTkLabel(
-        page,
+        content,
         text="Renewable Energy Output Prediction Using Artificial Neural Networks",
         text_color=ACCENT,
         font=ctk.CTkFont(size=22, weight="bold")
-    ).pack(anchor="w", pady=(0, 20))
+    ).grid(row=1, column=0, sticky="w", pady=(4, 18))
 
-    cards_frame = ctk.CTkFrame(page, fg_color=BG)
-    cards_frame.pack(fill="both", expand=True)
+    cards_frame = ctk.CTkFrame(content, fg_color=BG)
+    cards_frame.grid(row=2, column=0, sticky="nsew")
+
+    cards_frame.grid_columnconfigure(0, weight=1)
+    cards_frame.grid_columnconfigure(1, weight=1)
+    cards_frame.grid_rowconfigure(0, weight=1)
+    cards_frame.grid_rowconfigure(1, weight=1)
 
     overview_items = [
         (
@@ -84,8 +99,3 @@ def build_overview_page(app):
             wraplength=520,
             justify="left"
         ).pack(anchor="w", padx=22, pady=(0, 22))
-
-    cards_frame.grid_columnconfigure(0, weight=1)
-    cards_frame.grid_columnconfigure(1, weight=1)
-    cards_frame.grid_rowconfigure(0, weight=1)
-    cards_frame.grid_rowconfigure(1, weight=1)

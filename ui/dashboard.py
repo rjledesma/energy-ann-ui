@@ -1,7 +1,15 @@
 from tkinter import messagebox
 import customtkinter as ctk
 
-from src.config import APP_TITLE, WINDOW_SIZE, MIN_WIDTH, MIN_HEIGHT
+from src.config import (
+    APP_TITLE,
+    WINDOW_WIDTH_RATIO,
+    WINDOW_HEIGHT_RATIO,
+    MIN_WIDTH,
+    MIN_HEIGHT,
+    MAX_WIDTH,
+    MAX_HEIGHT,
+)
 from src.model_loader import load_all_models_and_artifacts
 from src.predictor import (
     predict_from_model,
@@ -29,37 +37,77 @@ class EnergyDashboard(ctk.CTk):
         self.entries = {}
 
         self.title(APP_TITLE)
-        self.geometry(WINDOW_SIZE)
+        self.set_dynamic_window_size()
         self.configure(fg_color=BG)
         self.minsize(MIN_WIDTH, MIN_HEIGHT)
 
         self.build_ui()
 
+    def set_dynamic_window_size(self):
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+
+        window_width = int(screen_width * WINDOW_WIDTH_RATIO)
+        window_height = int(screen_height * WINDOW_HEIGHT_RATIO)
+
+        window_width = max(MIN_WIDTH, min(window_width, MAX_WIDTH))
+        window_height = max(MIN_HEIGHT, min(window_height, MAX_HEIGHT))
+
+        x_position = int((screen_width - window_width) / 2)
+        y_position = int((screen_height - window_height) / 2)
+
+        self.geometry(f"{window_width}x{window_height}+{x_position}+{y_position}")
+
     def build_ui(self):
         self.wrapper = ctk.CTkFrame(self, fg_color=BG, corner_radius=0)
-        self.wrapper.pack(fill="both", expand=True, padx=24, pady=20)
+        self.wrapper.pack(fill="both", expand=True, padx=24, pady=12)
+
+        self.wrapper.grid_columnconfigure(0, weight=1)
+        self.wrapper.grid_rowconfigure(0, weight=0)
+        self.wrapper.grid_rowconfigure(1, weight=1)
 
         self.build_navbar()
 
-        self.page_container = ctk.CTkFrame(self.wrapper, fg_color=BG, corner_radius=0)
-        self.page_container.pack(fill="both", expand=True)
+        self.page_container = ctk.CTkFrame(
+            self.wrapper,
+            fg_color=BG,
+            corner_radius=0
+        )
+        self.page_container.grid(row=1, column=0, sticky="nsew", pady=(0, 0))
+
+        self.page_container.grid_columnconfigure(0, weight=1)
+        self.page_container.grid_rowconfigure(0, weight=1)
 
         self.show_page("Monitoring")
 
     def build_navbar(self):
         nav = ctk.CTkFrame(self.wrapper, fg_color=BG)
-        nav.pack(fill="x", pady=(0, 16))
+        nav.grid(row=0, column=0, sticky="ew")
 
-        brand = ctk.CTkLabel(
-            nav,
-            text="☀ ENERGY AI",
+        nav.grid_columnconfigure(0, weight=1)
+        nav.grid_columnconfigure(1, weight=2)
+        nav.grid_columnconfigure(2, weight=1)
+
+        brand_frame = ctk.CTkFrame(nav, fg_color=BG, width=160)
+        brand_frame.grid(row=0, column=0, sticky="w")
+        brand_frame.grid_propagate(False)
+
+        ctk.CTkLabel(
+            brand_frame,
+            text="☀",
+            text_color=ACCENT,
+            font=ctk.CTkFont(size=24, weight="bold")
+        ).pack(side="left", padx=(0, 6))
+
+        ctk.CTkLabel(
+            brand_frame,
+            text="ENERGY AI",
             text_color=TEXT,
             font=ctk.CTkFont(size=22, weight="bold")
-        )
-        brand.pack(side="left", padx=(8, 0))
+        ).pack(side="left")
 
         center_frame = ctk.CTkFrame(nav, fg_color=BG)
-        center_frame.pack(side="left", expand=True)
+        center_frame.grid(row=0, column=1)
 
         nav_items = ["Overview", "Monitoring", "Analytics", "Energy"]
 
@@ -82,20 +130,9 @@ class EnergyDashboard(ctk.CTk):
 
             self.nav_buttons[page_name] = btn
 
-        right_frame = ctk.CTkFrame(nav, fg_color=BG)
-        right_frame.pack(side="right")
-
-        for icon in ["🔔", "👤"]:
-            ctk.CTkButton(
-                right_frame,
-                text=icon,
-                width=40,
-                height=40,
-                corner_radius=20,
-                fg_color=WHITE,
-                text_color=TEXT,
-                hover_color="#F4F1EB"
-            ).pack(side="left", padx=6)
+        spacer = ctk.CTkFrame(nav, fg_color=BG, width=160)
+        spacer.grid(row=0, column=2, sticky="e")
+        spacer.grid_propagate(False)
 
     def clear_page_container(self):
         for widget in self.page_container.winfo_children():
@@ -118,25 +155,15 @@ class EnergyDashboard(ctk.CTk):
 
         if page_name == "Overview":
             build_overview_page(self)
-
         elif page_name == "Monitoring":
             build_monitoring_page(self)
-
         elif page_name == "Analytics":
             build_analytics_page(self)
-
         elif page_name == "Energy":
             build_energy_page(self)
 
-    # ------------------------
-    # Shared mode / prediction actions
-    # ------------------------
-
     def on_mode_change(self, selected):
-        if selected == "PVGIS Solar Output":
-            self.current_mode = "pvgis"
-        else:
-            self.current_mode = "uci"
+        self.current_mode = "pvgis" if selected == "PVGIS Solar Output" else "uci"
 
         if hasattr(self, "build_dynamic_fields"):
             self.build_dynamic_fields()
@@ -148,12 +175,20 @@ class EnergyDashboard(ctk.CTk):
             self.update_metric_cards()
 
     def update_mode_labels(self):
+        if not hasattr(self, "result_title"):
+            return
+
         if self.current_mode == "pvgis":
             self.result_title.configure(text="Solar Energy Output")
             self.result_value.configure(text="0.0000 kWh")
             self.card_dataset.value_label.configure(text="PVGIS-ERA5")
             self.card_dataset.subtitle_label.configure(text="Solar output prediction")
             self.summary_text.configure(text="PVGIS mode predicts estimated solar energy output.")
+
+            if hasattr(self, "mode_description"):
+                self.mode_description.configure(
+                    text="PVGIS mode predicts solar energy output in kWh from solar/weather inputs."
+                )
         else:
             self.result_title.configure(text="Building Heating Load")
             self.result_value.configure(text="0.0000 HL")
@@ -161,15 +196,19 @@ class EnergyDashboard(ctk.CTk):
             self.card_dataset.subtitle_label.configure(text="Heating load prediction")
             self.summary_text.configure(text="UCI mode predicts building heating load.")
 
+            if hasattr(self, "mode_description"):
+                self.mode_description.configure(
+                    text="UCI mode predicts building heating load from building design features."
+                )
+
     def clear_inputs(self):
         for entry in self.entries.values():
             entry.delete(0, "end")
 
         if hasattr(self, "result_value"):
-            if self.current_mode == "pvgis":
-                self.result_value.configure(text="0.0000 kWh")
-            else:
-                self.result_value.configure(text="0.0000 HL")
+            self.result_value.configure(
+                text="0.0000 kWh" if self.current_mode == "pvgis" else "0.0000 HL"
+            )
 
         if hasattr(self, "result_desc"):
             self.result_desc.configure(text="Predict to see the estimated output.")
